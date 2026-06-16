@@ -93,14 +93,16 @@ class Game(Entity):
                               color=color.yellow)
 
     def _setup_camera(self):
-        # a slightly lower, pulled-back angle so flying saucers stay in view
-        self.cam_height = 20
-        self.cam_back = 21
-        self.cam_pitch = 44
+        # third-person chase camera that rides behind the tank's heading
+        self.cam_height = 9.0          # how far above the tank the camera sits
+        self.cam_back = 17.0           # how far behind the tank it trails
+        self.cam_look_height = 2.5     # aim point above the tank (keeps it low in frame)
+        self.cam_lerp = 5.0            # follow smoothing (higher = snappier)
         camera.orthographic = False
-        camera.fov = 60
+        camera.fov = 70
+        # start already parked behind the tank's initial heading (+Z forward)
         camera.position = (0, self.cam_height, -self.cam_back)
-        camera.rotation = (self.cam_pitch, 0, 0)
+        camera.look_at(Vec3(0, self.cam_look_height, 0))
 
     # ----------------------------------------------------------------- update
     def update(self):
@@ -115,9 +117,14 @@ class Game(Entity):
         self._update_camera()
 
     def _update_camera(self):
-        target = Vec3(self.tank.x, self.cam_height, self.tank.z - self.cam_back)
-        camera.position = lerp(camera.position, target, min(1, 6 * time.dt))
-        camera.rotation = (self.cam_pitch, 0, 0)
+        # trail the camera behind whatever direction the tank body is facing
+        rad = math.radians(self.tank.rotation_y)
+        forward = Vec3(math.sin(rad), 0, math.cos(rad))
+        desired = (self.tank.world_position
+                   + Vec3(0, self.cam_height, 0)
+                   - forward * self.cam_back)
+        camera.position = lerp(camera.position, desired, min(1, self.cam_lerp * time.dt))
+        camera.look_at(self.tank.world_position + Vec3(0, self.cam_look_height, 0))
 
     def _update_hud(self):
         self.hp_bar.scale_x = 0.42 * max(0, self.tank.hp) / self.tank.max_hp
