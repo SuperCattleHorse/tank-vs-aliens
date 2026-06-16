@@ -112,7 +112,15 @@ def start_game():
     if state["game"] is not None:
         state["game"].teardown()
         state["game"] = None
-    state["game"] = Game(on_game_over=show_game_over)
+    state["game"] = Game(on_game_over=show_game_over, on_exit=return_to_menu)
+
+
+def return_to_menu():
+    # called by the in-game pause menu's "Main Menu" button
+    if state["game"] is not None:
+        state["game"].teardown()
+        state["game"] = None
+    show_main_menu()
 
 
 def show_game_over(score):
@@ -149,15 +157,10 @@ def quit_game():
 
 # ----------------------------------------------------------------------- input
 def input(key):
-    if key == "escape":
-        if state["game"] is not None and state["game"].running:
-            # abort the current run and go back to the menu
-            state["game"].teardown()
-            state["game"] = None
-            show_main_menu()
-        elif state["game"] is None:
-            # already on a menu screen -> quit the app
-            application.quit()
+    # In-game, Esc is handled by Game.input (it pauses). Here we only handle the
+    # menu screens, where there is no active run to pause.
+    if key == "escape" and state["game"] is None:
+        application.quit()
 
 
 show_main_menu()

@@ -9,8 +9,8 @@ import math
 import random
 
 from ursina import (
-    Entity, Sky, Text, camera, mouse, color, Vec3, time, destroy, invoke,
-    lerp, distance, distance_xz, held_keys, clamp, window,
+    Entity, Sky, Text, Button, camera, mouse, color, Vec3, time, destroy, invoke,
+    lerp, distance, distance_xz, held_keys, clamp, window, application,
 )
 
 from entities import Tank, Bullet, UFO, GroundAlien, Explosion, ARENA_BOUND, GROUND_SIZE
@@ -18,10 +18,15 @@ from audio import play_sound
 
 
 class Game(Entity):
-    def __init__(self, on_game_over=None):
+    def __init__(self, on_game_over=None, on_exit=None):
         super().__init__()
+        # keep receiving input (Esc) even while the game is paused
+        self.ignore_paused = True
         self.on_game_over = on_game_over
+        self.on_exit = on_exit
         self.running = True
+        self.paused = False
+        self.pause_menu = None
         self.score = 0
         self.elapsed = 0.0
         self.fire_cd = 0.0
@@ -89,7 +94,7 @@ class Game(Entity):
                                origin=(1, 0), scale=1.2, color=color.yellow)
         self.info_text = Text("", parent=self.hud, position=(0, 0.47), origin=(0, 0),
                               scale=1.0, color=color.white)
-        Text("WASD move    Mouse aim    Left-Click fire    Esc menu",
+        Text("WASD move    Mouse aim    Left-Click fire    Esc pause",
              parent=self.hud, position=(0, -0.47), origin=(0, 0), scale=0.8,
              color=color.light_gray)
         self.crosshair = Text("+", parent=camera.ui, origin=(0, 0), scale=2.2,
@@ -107,9 +112,60 @@ class Game(Entity):
         camera.position = (0, self.cam_height, -self.cam_back)
         camera.look_at(Vec3(0, self.cam_look_height, 0))
 
+    # ------------------------------------------------------------------ pause
+    def input(self, key):
+        # Esc toggles pause instead of bailing straight out to the menu
+        if key == "escape" and self.running:
+            self.toggle_pause()
+
+    def toggle_pause(self):
+        if not self.running:
+            return
+        self.paused = not self.paused
+        application.paused = self.paused
+        mouse.visible = self.paused
+        mouse.locked = False
+        if self.paused:
+            self._build_pause_menu()
+        elif self.pause_menu is not None:
+            destroy(self.pause_menu)
+            self.pause_menu = None
+
+    def _build_pause_menu(self):
+        # ignore_paused=True keeps these widgets interactive while the world is frozen
+        self.pause_menu = Entity(parent=camera.ui, ignore_paused=True)
+        Entity(parent=self.pause_menu, model="quad", color=color.hsv(220, 0.45, 0.06),
+               alpha=0.85, scale=(0.66, 0.82), ignore_paused=True)
+        Text("PAUSED", parent=self.pause_menu, origin=(0, 0), position=(0, 0.26),
+             scale=2.8, color=color.hsv(45, 0.85, 1.0))
+        Text("The horde will wait... for now.", parent=self.pause_menu, origin=(0, 0),
+             position=(0, 0.15), scale=1.0, color=color.hsv(195, 0.30, 0.92))
+        Button("RESUME", parent=self.pause_menu, scale=(0.34, 0.09), position=(0, 0.0),
+               color=color.hsv(140, 0.55, 0.6), text_color=color.black,
+               highlight_color=color.hsv(140, 0.55, 0.78), ignore_paused=True,
+               on_click=self.toggle_pause)
+        Button("MAIN MENU", parent=self.pause_menu, scale=(0.34, 0.09), position=(0, -0.13),
+               color=color.hsv(210, 0.55, 0.68), text_color=color.white,
+               highlight_color=color.hsv(200, 0.6, 0.85), ignore_paused=True,
+               on_click=self.exit_to_menu)
+        Button("QUIT", parent=self.pause_menu, scale=(0.34, 0.09), position=(0, -0.26),
+               color=color.hsv(5, 0.7, 0.6), text_color=color.white,
+               highlight_color=color.hsv(20, 0.85, 0.75), ignore_paused=True,
+               on_click=application.quit)
+
+    def exit_to_menu(self):
+        # leave the paused run and hand control back to the main menu
+        application.paused = False
+        self.paused = False
+        if self.pause_menu is not None:
+            destroy(self.pause_menu)
+            self.pause_menu = None
+        if self.on_exit is not None:
+            invoke(self.on_exit, delay=0.02)
+
     # ----------------------------------------------------------------- update
     def update(self):
-        if not self.running:
+        if self.paused or not self.running:
             return
         self.elapsed += time.dt
         self._handle_fire()
@@ -304,7 +360,12 @@ class Game(Entity):
     # --------------------------------------------------------------- teardown
     def teardown(self):
         self.running = False
+        self.paused = False
+        application.paused = False
         mouse.visible = True
+        if self.pause_menu is not None:
+            destroy(self.pause_menu)
+            self.pause_menu = None
         for group in (self.player_bullets, self.enemy_bullets, self.ufos, self.aliens):
             for e in group:
                 destroy(e)
