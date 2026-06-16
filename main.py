@@ -8,7 +8,7 @@ Esc returns to the main menu. On death a game-over panel shows your score.
 """
 from ursina import (
     Ursina, Entity, Text, Button, camera, color, window, mouse, application,
-    destroy, Func, time,
+    destroy, Func, invoke, time,
 )
 
 from game import Game
@@ -21,7 +21,40 @@ window.fps_counter.enabled = False
 window.exit_button.visible = False
 
 # shared mutable state across the screen-transition callbacks
-state = {"game": None, "menu": None, "music": None}
+state = {"game": None, "menu": None, "music": None, "win_size": None, "win_pos": None}
+
+
+# ------------------------------------------------------------------ keep window
+def _snapshot_window():
+    """Remember the window's current on-screen size and position."""
+    try:
+        props = application.base.win.getProperties()
+        if props.hasSize():
+            state["win_size"] = (props.getXSize(), props.getYSize())
+        if props.hasOrigin():
+            state["win_pos"] = (props.getXOrigin(), props.getYOrigin())
+    except Exception:
+        pass
+
+
+def _restore_window():
+    """Re-assert the remembered geometry if a screen change disturbed it."""
+    try:
+        props = application.base.win.getProperties()
+        size, pos = state.get("win_size"), state.get("win_pos")
+        if size and props.hasSize() and (props.getXSize(), props.getYSize()) != tuple(size):
+            window.size = size
+        if pos and props.hasOrigin() and (props.getXOrigin(), props.getYOrigin()) != tuple(pos):
+            window.position = pos
+    except Exception:
+        pass
+
+
+def _keep_window():
+    """Snapshot the geometry now and re-apply it a few frames later, so that
+    entering the game or returning to a menu never resizes or moves the window."""
+    _snapshot_window()
+    invoke(_restore_window, delay=0.12)
 
 
 # --------------------------------------------------------------------------- bg
@@ -33,6 +66,7 @@ def _start_music():
 
 # ------------------------------------------------------------------- main menu
 def show_main_menu():
+    _keep_window()
     _clear_menu()
     _start_music()
     mouse.visible = True
@@ -73,6 +107,7 @@ def _clear_menu():
 # ----------------------------------------------------------------- transitions
 def start_game():
     play_sound("ui_click", volume=0.6)
+    _keep_window()
     _clear_menu()
     if state["game"] is not None:
         state["game"].teardown()
@@ -81,6 +116,7 @@ def start_game():
 
 
 def show_game_over(score):
+    _keep_window()
     if state["game"] is not None:
         state["game"].teardown()
         state["game"] = None
