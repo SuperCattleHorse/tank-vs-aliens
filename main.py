@@ -16,7 +16,7 @@ from audio import play_sound
 
 app = Ursina(title="Tank vs Aliens 3D", borderless=False, fullscreen=False,
              development_mode=False, vsync=True)
-window.color = color.hsv(220, 0.35, 0.10)
+window.color = color.hsv(222, 0.50, 0.07)
 window.fps_counter.enabled = False
 window.exit_button.visible = False
 
@@ -64,6 +64,28 @@ def _start_music():
                                     autoplay=True, auto_destroy=False)
 
 
+# --------------------------------------------------------------------- palette
+TITLE_GOLD   = color.hsv(45, 0.85, 1.00)
+TITLE_SHADOW = color.hsv(222, 0.60, 0.05)
+ACCENT_CYAN  = color.hsv(190, 0.55, 0.96)
+SUBTLE_TEXT  = color.hsv(210, 0.20, 0.80)
+PANEL_BG     = color.hsv(222, 0.55, 0.05)
+
+BTN_GREEN    = color.hsv(140, 0.55, 0.60)
+BTN_GREEN_HI = color.hsv(140, 0.55, 0.80)
+BTN_BLUE     = color.hsv(210, 0.55, 0.70)
+BTN_BLUE_HI  = color.hsv(200, 0.60, 0.88)
+BTN_RED      = color.hsv(5, 0.70, 0.60)
+BTN_RED_HI   = color.hsv(20, 0.85, 0.78)
+
+
+def _menu_button(text, parent, y, base, hi, text_color, on_click):
+    """A consistently styled menu button."""
+    return Button(text, parent=parent, scale=(0.34, 0.095), position=(0, y),
+                  color=base, highlight_color=hi, text_color=text_color,
+                  on_click=on_click)
+
+
 # ------------------------------------------------------------------- main menu
 def show_main_menu():
     _keep_window()
@@ -72,28 +94,34 @@ def show_main_menu():
     mouse.visible = True
 
     menu = Entity(parent=camera.ui)
-    # decorative spinning UFO behind the title
-    deco = Entity(parent=menu, model="sphere", color=color.hsv(195, 0.5, 0.9),
-                  scale=(0.5, 0.12, 0.5), position=(0, 0.12, 0), rotation_z=10)
+
+    # soft backdrop panel to frame the menu
+    Entity(parent=menu, model="quad", color=PANEL_BG, alpha=0.5, scale=(0.98, 1.1))
+
+    # decorative spinning saucer behind the title
+    deco = Entity(parent=menu, model="sphere", color=ACCENT_CYAN,
+                  scale=(0.62, 0.14, 0.62), position=(0, 0.30, 0.02), rotation_z=10)
     deco.animate_rotation((0, 360, 10), duration=6, loop=True)
 
+    # title with a drop shadow for legibility
+    Text("TANK  vs  ALIENS", parent=menu, origin=(0, 0), position=(0.006, 0.272),
+         scale=3.4, color=TITLE_SHADOW)
     Text("TANK  vs  ALIENS", parent=menu, origin=(0, 0), position=(0, 0.28),
-         scale=3.2, color=color.lime)
-    Text("3D", parent=menu, origin=(0, 0), position=(0, 0.15), scale=2.0,
-         color=color.yellow)
-    Text("Defend Earth. Blast the saucers and the alien horde.",
-         parent=menu, origin=(0, 0), position=(0, 0.04), scale=1.0,
-         color=color.light_gray)
+         scale=3.4, color=TITLE_GOLD)
+    Text("3 D", parent=menu, origin=(0, 0), position=(0, 0.16), scale=1.7,
+         color=ACCENT_CYAN)
+    Text("Defend Earth -- blast the saucers and the alien horde.",
+         parent=menu, origin=(0, 0), position=(0, 0.07), scale=1.0,
+         color=SUBTLE_TEXT)
 
-    Button("START  GAME", parent=menu, scale=(0.32, 0.09), position=(0, -0.10),
-           color=color.lime, text_color=color.black, highlight_color=color.yellow,
-           on_click=start_game)
-    Button("QUIT", parent=menu, scale=(0.32, 0.09), position=(0, -0.24),
-           color=color.red, highlight_color=color.orange, on_click=quit_game)
+    _menu_button("START  GAME", menu, -0.085, BTN_GREEN, BTN_GREEN_HI,
+                 color.black, start_game)
+    _menu_button("QUIT", menu, -0.215, BTN_RED, BTN_RED_HI,
+                 color.white, quit_game)
 
-    Text("WASD move    Mouse aim    Left-Click fire",
+    Text("WASD move      Mouse aim      Left-Click fire      Esc pause",
          parent=menu, origin=(0, 0), position=(0, -0.40), scale=0.85,
-         color=color.gray)
+         color=SUBTLE_TEXT)
 
     state["menu"] = menu
 
@@ -132,20 +160,23 @@ def show_game_over(score):
     mouse.visible = True
 
     menu = Entity(parent=camera.ui)
-    Entity(parent=menu, model="quad", color=color.black, alpha=0.6,
-           scale=(0.7, 0.6))
-    Text("GAME OVER", parent=menu, origin=(0, 0), position=(0, 0.22),
-         scale=3.0, color=color.red)
-    Text(f"FINAL SCORE   {score}", parent=menu, origin=(0, 0), position=(0, 0.08),
-         scale=1.6, color=color.yellow)
+    Entity(parent=menu, model="quad", color=PANEL_BG, alpha=0.72, scale=(0.82, 0.92))
 
-    Button("PLAY  AGAIN", parent=menu, scale=(0.32, 0.09), position=(0, -0.08),
-           color=color.lime, text_color=color.black, highlight_color=color.yellow,
-           on_click=start_game)
-    Button("MAIN  MENU", parent=menu, scale=(0.32, 0.09), position=(0, -0.22),
-           color=color.azure, highlight_color=color.cyan, on_click=show_main_menu)
-    Button("QUIT", parent=menu, scale=(0.32, 0.09), position=(0, -0.36),
-           color=color.red, highlight_color=color.orange, on_click=quit_game)
+    Text("GAME  OVER", parent=menu, origin=(0, 0), position=(0.006, 0.262),
+         scale=3.0, color=TITLE_SHADOW)
+    Text("GAME  OVER", parent=menu, origin=(0, 0), position=(0, 0.27),
+         scale=3.0, color=color.hsv(5, 0.80, 0.98))
+    Text("FINAL SCORE", parent=menu, origin=(0, 0), position=(0, 0.13),
+         scale=1.1, color=SUBTLE_TEXT)
+    Text(f"{score}", parent=menu, origin=(0, 0), position=(0, 0.04),
+         scale=2.8, color=TITLE_GOLD)
+
+    _menu_button("PLAY  AGAIN", menu, -0.10, BTN_GREEN, BTN_GREEN_HI,
+                 color.black, start_game)
+    _menu_button("MAIN  MENU", menu, -0.23, BTN_BLUE, BTN_BLUE_HI,
+                 color.white, show_main_menu)
+    _menu_button("QUIT", menu, -0.36, BTN_RED, BTN_RED_HI,
+                 color.white, quit_game)
 
     state["menu"] = menu
 
