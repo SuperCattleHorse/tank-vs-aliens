@@ -69,12 +69,12 @@ class Tank(Entity):
 
     @property
     def muzzle_position(self):
-        return self.turret.world_position + self.turret.forward * 2.4 + Vec3(0, 0.15, 0)
+        return self.barrel.world_position + self.barrel.forward * 1.3
 
     @property
     def aim_direction(self):
-        # full 3D so the cannon can fire upward at flying saucers
-        return Vec3(self.turret.forward).normalized()
+        # the barrel elevates toward the target so flying saucers stay hittable
+        return Vec3(self.barrel.forward).normalized()
 
     def update(self):
         if not self.alive:
@@ -90,12 +90,20 @@ class Tank(Entity):
             target_y = math.degrees(math.atan2(move.x, move.z))
             self.rotation_y = _approach_angle(self.rotation_y, target_y, 360 * time.dt)
 
-        # turret rides on top of the hull and aims in full 3D at whatever the
-        # mouse points at -- the ground, a ground alien, or a flying saucer
+        # turret sits flat on top of the hull: it only yaws (spins level) to
+        # track the aim, while the barrel alone elevates -- so the turret never
+        # looks tilted yet the cannon can still point up at flying saucers
         self.turret.position = self.world_position + Vec3(0, self.turret_height, 0)
         aim = mouse.world_point
         if aim is not None:
-            self.turret.look_at(aim)
+            dx = aim.x - self.turret.world_x
+            dz = aim.z - self.turret.world_z
+            self.turret.rotation = (0, math.degrees(math.atan2(dx, dz)), 0)
+            horizontal = math.sqrt(dx * dx + dz * dz)
+            dy = aim.y - (self.turret.world_y + 0.15)
+            elevation = math.degrees(math.atan2(dy, max(horizontal, 0.001)))
+            # negative rotation_x raises the muzzle; clamp to a believable arc
+            self.barrel.rotation_x = clamp(-elevation, -60, 12)
 
     def take_damage(self, amount):
         if not self.alive:
