@@ -29,6 +29,7 @@ class Game(Entity):
         self.spawn_timer = 1.5
 
         self.props = []
+        self.rocks = []
         self.player_bullets = []
         self.enemy_bullets = []
         self.ufos = []
@@ -65,14 +66,16 @@ class Game(Entity):
                 model="cube", color=color.hsv(30, 0.30, 0.35),
                 scale=(sx, 3, sz), position=(px, 1.5, pz)))
 
-        # scattered rocks for depth / reference
+        # scattered rocks for depth / reference -- they also stop & detonate shells
         for _ in range(45):
-            self.props.append(Entity(
+            rock = Entity(
                 model="cube", color=color.hsv(30, 0.15, random.uniform(0.4, 0.6)),
                 position=(random.uniform(-ARENA_BOUND, ARENA_BOUND),
                           random.uniform(-0.1, 0.4),
                           random.uniform(-ARENA_BOUND, ARENA_BOUND)),
-                scale=random.uniform(0.6, 1.7), rotation_y=random.uniform(0, 360)))
+                scale=random.uniform(0.6, 1.7), rotation_y=random.uniform(0, 360))
+            self.props.append(rock)
+            self.rocks.append(rock)
 
     def _build_hud(self):
         self.hud = Entity(parent=camera.ui)
@@ -229,6 +232,31 @@ class Game(Entity):
             if u.fire_timer <= 0:
                 u.fire_timer = random.uniform(2.0, 3.8)
                 self._ufo_fire(u)
+
+        # any bullet that slams into a wall, the ground or a rock detonates and
+        # is removed, so shells never sail on past whatever they struck
+        for b in self.player_bullets + self.enemy_bullets:
+            if getattr(b, "dead", False):
+                continue
+            if self._bullet_world_hit(b):
+                pos = Vec3(b.world_position)
+                b.dead = True
+                destroy(b)
+                Explosion(pos, scale=0.4, sound=False)
+
+    def _bullet_world_hit(self, b):
+        # reached an arena wall (or flew off the field)
+        if abs(b.x) > ARENA_BOUND + 2 or abs(b.z) > ARENA_BOUND + 2:
+            return True
+        # slammed into the ground
+        if b.y <= 0.12:
+            return True
+        # struck one of the scattered rocks
+        for r in self.rocks:
+            half = r.scale_x * 0.5
+            if distance_xz(b, r) < half + 0.25 and b.y < r.world_y + r.scale_y * 0.5 + 0.2:
+                return True
+        return False
 
     def _ufo_fire(self, u):
         direction = (self.tank.world_position + Vec3(0, 0.9, 0)) - u.world_position
