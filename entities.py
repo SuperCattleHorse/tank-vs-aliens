@@ -107,9 +107,22 @@ class Tank(Entity):
         aim = None
         hovered = mouse.hovered_entity
         if hovered is not None and getattr(hovered, "is_enemy", False):
-            enemy_root = hovered.parent if hovered.parent is not None else hovered
-            y_offset = getattr(enemy_root, "aim_offset_y", 0.35)
-            aim = enemy_root.world_position + Vec3(0, y_offset, 0)
+            # Prefer raycast hit point; it avoids stale-entity world_position lookups.
+            if mouse.world_point is not None:
+                aim = mouse.world_point
+            else:
+                enemy_root = hovered.parent if hovered.parent is not None else hovered
+                y_offset = getattr(enemy_root, "aim_offset_y", 0.35)
+                # hovered/pick can go stale right after destroy(); guard empty node paths.
+                try:
+                    if (enemy_root is not None
+                            and getattr(enemy_root, "enabled", True)
+                            and not enemy_root.is_empty()):
+                        aim = enemy_root.world_position + Vec3(0, y_offset, 0)
+                    else:
+                        aim = None
+                except Exception:
+                    aim = None
         else:
             aim = mouse.world_point
 
@@ -178,23 +191,31 @@ class Explosion(Entity):
     def __init__(self, position, scale=1.0, sound=True, volume=0.5):
         super().__init__(position=position)
         flash = Entity(parent=self, model="sphere", color=color.orange, scale=0.6 * scale)
-        flash.animate_scale(2.7 * scale, duration=0.30, curve=curve.out_expo)
-        flash.fade_out(duration=0.35)
+        flash.animate_scale(2.2 * scale, duration=0.22, curve=curve.out_expo)
+        flash.fade_out(duration=0.24)
 
         core = Entity(parent=self, model="sphere", color=color.yellow, scale=0.3 * scale)
-        core.animate_scale(1.5 * scale, duration=0.25, curve=curve.out_expo)
-        core.fade_out(duration=0.30)
+        core.animate_scale(1.3 * scale, duration=0.18, curve=curve.out_expo)
+        core.fade_out(duration=0.22)
 
-        for _ in range(9):
+        # lower-cost shard count: large kills still look punchy, tiny impacts stay cheap
+        if scale >= 1.0:
+            shard_count = 4
+        elif scale >= 0.5:
+            shard_count = 2
+        else:
+            shard_count = 1
+
+        for _ in range(shard_count):
             shard = Entity(parent=self, model="cube", color=color.orange, scale=0.22 * scale)
             d = Vec3(random.uniform(-1, 1), random.uniform(0.2, 1), random.uniform(-1, 1)).normalized()
-            shard.animate_position(d * 2.4 * scale, duration=0.45, curve=curve.out_expo)
-            shard.animate_rotation((random.uniform(0, 360),) * 3, duration=0.45)
-            shard.fade_out(duration=0.45)
+            shard.animate_position(d * 2.0 * scale, duration=0.28, curve=curve.out_expo)
+            shard.animate_rotation((random.uniform(0, 360),) * 3, duration=0.28)
+            shard.fade_out(duration=0.28)
 
         if sound:
             play_sound("explosion", volume=volume)
-        destroy(self, delay=0.7)
+        destroy(self, delay=0.4)
 
 
 # ---------------------------------------------------------------------------

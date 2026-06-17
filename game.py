@@ -33,6 +33,8 @@ class Game(Entity):
         self.fire_cd = 0.0
         self.fire_interval = 0.22
         self.spawn_timer = 1.5
+        self.enemy_soft_cap = 16
+        self.rock_check_toggle = False
         # camera control: A/D yaw, mouse Y for pitch, settings slider adjusts sensitivity
         self.cam_yaw = 0           # current yaw offset from tank heading
         self.target_cam_yaw = 0    # target yaw for smooth lerp transition
@@ -261,7 +263,12 @@ class Game(Entity):
     def _spawn(self):
         self.spawn_timer -= time.dt
         if self.spawn_timer <= 0:
-            self.spawn_timer = max(0.55, 2.2 - self.elapsed * 0.02)
+            enemy_count = len(self.ufos) + len(self.aliens)
+            if enemy_count >= self.enemy_soft_cap:
+                # under heavy load, slow spawns instead of stacking more actors
+                self.spawn_timer = 1.05
+                return
+            self.spawn_timer = max(0.75, 2.2 - self.elapsed * 0.02)
             self._spawn_enemy()
 
     def _spawn_enemy(self):
@@ -331,22 +338,26 @@ class Game(Entity):
 
         # any bullet that slams into a wall, the ground or a rock detonates and
         # is removed, so shells never sail on past whatever they struck
+        # rocks are checked every other frame to cut worst-case per-frame cost.
+        self.rock_check_toggle = not self.rock_check_toggle
         for b in self.player_bullets + self.enemy_bullets:
             if getattr(b, "dead", False):
                 continue
-            if self._bullet_world_hit(b):
+            if self._bullet_world_hit(b, check_rocks=self.rock_check_toggle):
                 pos = Vec3(b.world_position)
                 b.dead = True
                 destroy(b)
                 Explosion(pos, scale=0.4, sound=False)
 
-    def _bullet_world_hit(self, b):
+    def _bullet_world_hit(self, b, check_rocks=True):
         # reached an arena wall (or flew off the field)
         if abs(b.x) > ARENA_BOUND + 2 or abs(b.z) > ARENA_BOUND + 2:
             return True
         # slammed into the ground
         if b.y <= 0.12:
             return True
+        if not check_rocks:
+            return False
         # struck one of the scattered rocks
         for r in self.rocks:
             half = r.scale_x * 0.5
