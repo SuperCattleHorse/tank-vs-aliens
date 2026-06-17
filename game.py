@@ -12,6 +12,7 @@ from ursina import (
     Entity, Sky, Text, Button, camera, mouse, color, Vec3, time, destroy, invoke,
     lerp, distance, distance_xz, held_keys, clamp, window, application,
 )
+from ursina.prefabs.slider import Slider
 
 from entities import Tank, Bullet, UFO, GroundAlien, Explosion, ARENA_BOUND, GROUND_SIZE
 from audio import play_sound
@@ -157,6 +158,18 @@ class Game(Entity):
                color=color.hsv(5, 0.7, 0.6), text_color=color.white,
                highlight_color=color.hsv(20, 0.85, 0.75), ignore_paused=True,
                on_click=application.quit)
+        
+        # mouse look sensitivity control
+        Text("Sensitivity", parent=self.pause_menu, origin=(0, 0), position=(0, -0.36),
+             scale=0.8, color=color.light_gray)
+        self.sens_slider = Slider(
+            parent=self.pause_menu, min=0, max=1, default=self.mouse_look_sensitivity,
+            position=(0, -0.44), scale=(0.32, 0.05), ignore_paused=True,
+            on_change=self._update_sensitivity
+        )
+
+    def _update_sensitivity(self, value):
+        self.mouse_look_sensitivity = clamp(value, 0, 1)
 
     def exit_to_menu(self):
         # leave the paused run and hand control back to the main menu
