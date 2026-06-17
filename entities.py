@@ -66,36 +66,76 @@ class Tank(Entity):
         self.barrel = Entity(parent=self.turret, model="cube", color=TRACK_GRAY,
                              scale=(0.22, 0.22, 2.2), position=(0, 0.15, 1.2))
         self.turret_height = 1.15
+        self.current_aim_point = self.world_position + Vec3(0, 0.8, 25)
 
     @property
     def muzzle_position(self):
-        return self.turret.world_position + self.turret.forward * 2.4 + Vec3(0, 0.15, 0)
+        # muzzle position at barrel end, accounting for barrel elevation
+        # this ensures bullet origin matches barrel direction
+        # barrel length is 2.2, so tip is half-length from the barrel center
+        barrel_tip = self.barrel.world_position + Vec3(self.barrel.forward).normalized() * 1.1
+        return barrel_tip
 
     @property
     def aim_direction(self):
-        # full 3D so the cannon can fire upward at flying saucers
-        return Vec3(self.turret.forward).normalized()
+        # the barrel elevates toward the target so flying saucers stay hittable
+        return Vec3(self.barrel.forward).normalized()
 
     def update(self):
         if not self.alive:
             return
-        # --- twin-stick movement relative to the fixed camera ---
-        move = Vec3(held_keys["d"] - held_keys["a"], 0, held_keys["w"] - held_keys["s"])
-        if move.length() > 0.1:
-            move = move.normalized()
-            self.position += move * self.speed * time.dt
+        # --- tank-style controls ---
+        # A/D rotate hull left/right; W/S move forward/back along current facing.
+        turn_input = held_keys["d"] - held_keys["a"]
+        self.rotation_y += turn_input * 110 * time.dt
+
+        move_input = held_keys["w"] - held_keys["s"]
+        if abs(move_input) > 0.01:
+            rad = math.radians(self.rotation_y)
+            forward = Vec3(math.sin(rad), 0, math.cos(rad))
+            self.position += forward * move_input * self.speed * time.dt
             self.x = clamp(self.x, -ARENA_BOUND, ARENA_BOUND)
             self.z = clamp(self.z, -ARENA_BOUND, ARENA_BOUND)
-            # body smoothly turns toward the movement direction
-            target_y = math.degrees(math.atan2(move.x, move.z))
-            self.rotation_y = _approach_angle(self.rotation_y, target_y, 360 * time.dt)
 
-        # turret rides on top of the hull and aims in full 3D at whatever the
-        # mouse points at -- the ground, a ground alien, or a flying saucer
+        # turret sits flat on top of the hull: it only yaws (spins level) to
+        # track the aim, while the barrel alone elevates -- so the turret never
+        # looks tilted yet the cannon can still point up at flying saucers
         self.turret.position = self.world_position + Vec3(0, self.turret_height, 0)
-        aim = mouse.world_point
+
+        # lock on enemy root center instead of pick-volume surface point,
+        # so crosshair lock and hit registration stay consistent.
+        aim = None
+        hovered = mouse.hovered_entity
+        if hovered is not None and getattr(hovered, "is_enemy", False):
+            # Prefer raycast hit point; it avoids stale-entity world_position lookups.
+            if mouse.world_point is not None:
+                aim = mouse.world_point
+            else:
+                enemy_root = hovered.parent if hovered.parent is not None else hovered
+                y_offset = getattr(enemy_root, "aim_offset_y", 0.35)
+                # hovered/pick can go stale right after destroy(); guard empty node paths.
+                try:
+                    if (enemy_root is not None
+                            and getattr(enemy_root, "enabled", True)
+                            and not enemy_root.is_empty()):
+                        aim = enemy_root.world_position + Vec3(0, y_offset, 0)
+                    else:
+                        aim = None
+                except Exception:
+                    aim = None
+        else:
+            aim = mouse.world_point
+
         if aim is not None:
-            self.turret.look_at(aim)
+            self.current_aim_point = Vec3(aim)
+            dx = aim.x - self.turret.world_x
+            dz = aim.z - self.turret.world_z
+            self.turret.rotation = (0, math.degrees(math.atan2(dx, dz)), 0)
+            horizontal = math.sqrt(dx * dx + dz * dz)
+            dy = aim.y - (self.turret.world_y + 0.15)
+            elevation = math.degrees(math.atan2(dy, max(horizontal, 0.001)))
+            # negative rotation_x raises the muzzle; allow steeper up-angle for close/high UFOs
+            self.barrel.rotation_x = clamp(-elevation, -85, 15)
 
     def take_damage(self, amount):
         if not self.alive:
@@ -151,23 +191,31 @@ class Explosion(Entity):
     def __init__(self, position, scale=1.0, sound=True, volume=0.5):
         super().__init__(position=position)
         flash = Entity(parent=self, model="sphere", color=color.orange, scale=0.6 * scale)
-        flash.animate_scale(2.7 * scale, duration=0.30, curve=curve.out_expo)
-        flash.fade_out(duration=0.35)
+        flash.animate_scale(2.2 * scale, duration=0.22, curve=curve.out_expo)
+        flash.fade_out(duration=0.24)
 
         core = Entity(parent=self, model="sphere", color=color.yellow, scale=0.3 * scale)
-        core.animate_scale(1.5 * scale, duration=0.25, curve=curve.out_expo)
-        core.fade_out(duration=0.30)
+        core.animate_scale(1.3 * scale, duration=0.18, curve=curve.out_expo)
+        core.fade_out(duration=0.22)
 
-        for _ in range(9):
+        # lower-cost shard count: large kills still look punchy, tiny impacts stay cheap
+        if scale >= 1.0:
+            shard_count = 4
+        elif scale >= 0.5:
+            shard_count = 2
+        else:
+            shard_count = 1
+
+        for _ in range(shard_count):
             shard = Entity(parent=self, model="cube", color=color.orange, scale=0.22 * scale)
             d = Vec3(random.uniform(-1, 1), random.uniform(0.2, 1), random.uniform(-1, 1)).normalized()
-            shard.animate_position(d * 2.4 * scale, duration=0.45, curve=curve.out_expo)
-            shard.animate_rotation((random.uniform(0, 360),) * 3, duration=0.45)
-            shard.fade_out(duration=0.45)
+            shard.animate_position(d * 2.0 * scale, duration=0.28, curve=curve.out_expo)
+            shard.animate_rotation((random.uniform(0, 360),) * 3, duration=0.28)
+            shard.fade_out(duration=0.28)
 
         if sound:
             play_sound("explosion", volume=volume)
-        destroy(self, delay=0.7)
+        destroy(self, delay=0.4)
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +228,7 @@ class UFO(Entity):
         self.hp = 2
         self.speed = 4.5
         self.hover_radius = 16
+        self.aim_offset_y = 0.35
         self.base_y = position[1]
         self.t = random.uniform(0, 6.28)
         self.fire_timer = random.uniform(1.5, 3.5)
@@ -224,6 +273,7 @@ class GroundAlien(Entity):
         self.target = target
         self.hp = 1
         self.speed = random.uniform(2.2, 3.4)
+        self.aim_offset_y = 1.1
         self.t = random.uniform(0, 6.28)
         self.score = 50
         self.attacked = False
