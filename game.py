@@ -198,8 +198,8 @@ class Game(Entity):
         # A/D (strafe keys) control yaw offset with smooth continuous rotation
         # only A/D keys affect camera yaw, continuously from -45 to +45 degrees
         a_input = held_keys["d"] - held_keys["a"]  # +1 right, -1 left, 0 neutral
-        # accumulate yaw offset based on A/D, 15 deg/sec rotation speed (slower for better control)
-        self.cam_yaw += a_input * 15 * time.dt
+        # accumulate yaw offset based on A/D, 3.75 deg/sec rotation speed (slower for precise control)
+        self.cam_yaw += a_input * 3.75 * time.dt
         self.cam_yaw = clamp(self.cam_yaw, -45, 45)  # clamp to reasonable arc
         
         # mouse Y position changes pitch: lower mouse = look down, higher = look up (inverted from common FPS)
