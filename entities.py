@@ -69,11 +69,10 @@ class Tank(Entity):
 
     @property
     def muzzle_position(self):
-        # muzzle position uses only horizontal forward to keep depth aligned with aim
-        # (elevation should not shift Z-axis aim point)
-        barrel_center = self.barrel.world_position
-        horiz_forward = Vec3(self.barrel.forward.x, 0, self.barrel.forward.z).normalized()
-        return barrel_center + horiz_forward * 1.8
+        # muzzle position at barrel end, accounting for barrel elevation
+        # this ensures bullet origin matches barrel direction
+        barrel_tip = self.barrel.world_position + Vec3(self.barrel.forward).normalized() * 2.2
+        return barrel_tip
 
     @property
     def aim_direction(self):

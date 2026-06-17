@@ -198,8 +198,8 @@ class Game(Entity):
         # A/D (strafe keys) control yaw offset with smooth continuous rotation
         # only A/D keys affect camera yaw, continuously from -45 to +45 degrees
         a_input = held_keys["d"] - held_keys["a"]  # +1 right, -1 left, 0 neutral
-        # accumulate yaw offset based on A/D, 45 deg/sec rotation speed
-        self.cam_yaw += a_input * 45 * time.dt
+        # accumulate yaw offset based on A/D, 15 deg/sec rotation speed (slower for better control)
+        self.cam_yaw += a_input * 15 * time.dt
         self.cam_yaw = clamp(self.cam_yaw, -45, 45)  # clamp to reasonable arc
         
         # mouse Y position changes pitch: lower mouse = look down, higher = look up (inverted from common FPS)
@@ -244,12 +244,8 @@ class Game(Entity):
     def fire(self):
         self.fire_cd = self.fire_interval
         pos = self.tank.muzzle_position
-        # aim direction considers both tank barrel elevation AND camera pitch offset
-        # adjust tank aim by the camera pitch component: move aim up/down based on pitch_offset
+        # bullet follows barrel direction exactly (barrel already points at aim target)
         direction = self.tank.aim_direction
-        pitch_rad = math.radians(self.cam_pitch_offset)
-        # add upward bias when camera looks up, downward when looking down
-        direction = Vec3(direction.x, direction.y + math.sin(pitch_rad) * 0.3, direction.z).normalized()
         self.player_bullets.append(
             Bullet(pos, direction, speed=62, owner="player", col=color.yellow, scale=0.35))
         flash = Entity(model="sphere", color=color.orange, position=pos, scale=0.7)
