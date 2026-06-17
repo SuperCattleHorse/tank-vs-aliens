@@ -94,7 +94,16 @@ class Tank(Entity):
         # track the aim, while the barrel alone elevates -- so the turret never
         # looks tilted yet the cannon can still point up at flying saucers
         self.turret.position = self.world_position + Vec3(0, self.turret_height, 0)
-        aim = mouse.world_point
+
+        # prioritize the hovered enemy's world center; this keeps lock-on and
+        # actual projectile direction aligned (especially for flying UFOs).
+        aim = None
+        hovered = mouse.hovered_entity
+        if hovered is not None and getattr(hovered, "is_enemy", False):
+            aim = hovered.world_position + Vec3(0, 0.35, 0)
+        else:
+            aim = mouse.world_point
+
         if aim is not None:
             dx = aim.x - self.turret.world_x
             dz = aim.z - self.turret.world_z
