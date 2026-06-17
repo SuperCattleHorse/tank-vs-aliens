@@ -83,11 +83,11 @@ class Game(Entity):
         self._update_streaming_world(force=True)
 
     def _terrain_height(self, x, z):
-        # lightweight deterministic rolling hills function.
+        # smooth rolling hills with larger wavelength for continuous slopes.
         return (
-            0.45 * math.sin(x * 0.030)
-            + 0.35 * math.cos(z * 0.027)
-            + 0.20 * math.sin((x + z) * 0.020)
+            0.95 * math.sin(x * 0.016)
+            + 0.70 * math.cos(z * 0.014)
+            + 0.35 * math.sin((x + z) * 0.011)
         )
 
     def _chunk_key(self, x, z):
@@ -101,21 +101,22 @@ class Game(Entity):
         chunk_rocks = []
         chunk_trees = []
 
-        # rolling grass tiles: 2x2 tiles per chunk with tiny tilt from sampled slope.
-        tile_size = self.chunk_size * 0.5
-        for tx in (-0.25, 0.25):
-            for tz in (-0.25, 0.25):
-                cxw = origin_x + tx * self.chunk_size
-                czw = origin_z + tz * self.chunk_size
+        # high-density grass micro-tiles to avoid visible chunk cracks.
+        tiles_per_axis = 8
+        tile_size = self.chunk_size / tiles_per_axis
+        start_x = origin_x - self.chunk_size * 0.5 + tile_size * 0.5
+        start_z = origin_z - self.chunk_size * 0.5 + tile_size * 0.5
+        for ix in range(tiles_per_axis):
+            for iz in range(tiles_per_axis):
+                cxw = start_x + ix * tile_size
+                czw = start_z + iz * tile_size
                 h = self._terrain_height(cxw, czw)
-                sx = self._terrain_height(cxw + tile_size * 0.35, czw) - self._terrain_height(cxw - tile_size * 0.35, czw)
-                sz = self._terrain_height(cxw, czw + tile_size * 0.35) - self._terrain_height(cxw, czw - tile_size * 0.35)
+                shade = rng.uniform(-0.04, 0.04)
                 tile = Entity(
                     model="cube",
-                    color=color.hsv(110, 0.50, 0.52),
-                    position=(cxw, h - 0.3, czw),
-                    scale=(tile_size + 0.15, 0.65, tile_size + 0.15),
-                    rotation=(clamp(-sz * 22, -8, 8), 0, clamp(sx * 22, -8, 8)),
+                    color=color.hsv(78, 0.48, clamp(0.56 + shade, 0.42, 0.7)),
+                    position=(cxw, h - 0.22, czw),
+                    scale=(tile_size + 0.06, 0.44, tile_size + 0.06),
                 )
                 chunk_props.append(tile)
                 self.props.append(tile)

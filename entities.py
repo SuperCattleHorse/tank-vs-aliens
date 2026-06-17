@@ -106,15 +106,18 @@ class Tank(Entity):
             ground_y = self.ground_height_fn(self.x, self.z)
             self.y = lerp(self.y, ground_y + self.hover_offset, min(1, 7 * time.dt))
 
-            sample = 1.2
+            sample = 1.6
             h_l = self.ground_height_fn(self.x - sample, self.z)
             h_r = self.ground_height_fn(self.x + sample, self.z)
             h_b = self.ground_height_fn(self.x, self.z - sample)
             h_f = self.ground_height_fn(self.x, self.z + sample)
-            target_roll = clamp((h_l - h_r) * 10.0, -7, 7)
-            target_pitch = clamp((h_b - h_f) * 10.0, -7, 7)
-            self.rotation_z = lerp(self.rotation_z, target_roll, min(1, 6 * time.dt))
-            self.rotation_x = lerp(self.rotation_x, target_pitch, min(1, 6 * time.dt))
+            target_roll = clamp((h_l - h_r) * 14.0, -11, 11)
+            target_pitch = clamp((h_b - h_f) * 14.0, -11, 11)
+            self.rotation_z = lerp(self.rotation_z, target_roll, min(1, 8 * time.dt))
+            self.rotation_x = lerp(self.rotation_x, target_pitch, min(1, 8 * time.dt))
+        else:
+            self.rotation_z = lerp(self.rotation_z, 0, min(1, 8 * time.dt))
+            self.rotation_x = lerp(self.rotation_x, 0, min(1, 8 * time.dt))
 
         # turret sits flat on top of the hull: it only yaws (spins level) to
         # track the aim, while the barrel alone elevates -- so the turret never
