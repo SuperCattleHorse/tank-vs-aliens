@@ -100,12 +100,12 @@ class Tank(Entity):
         # looks tilted yet the cannon can still point up at flying saucers
         self.turret.position = self.world_position + Vec3(0, self.turret_height, 0)
 
-        # prioritize the hovered enemy's world center; this keeps lock-on and
-        # actual projectile direction aligned (especially for flying UFOs).
+        # prioritize the exact mouse hit point when hovering an enemy collider;
+        # this keeps crosshair lock-on and projectile direction tightly aligned.
         aim = None
         hovered = mouse.hovered_entity
         if hovered is not None and getattr(hovered, "is_enemy", False):
-            aim = hovered.world_position + Vec3(0, 0.35, 0)
+            aim = mouse.world_point if mouse.world_point is not None else hovered.world_position + Vec3(0, 0.35, 0)
         else:
             aim = mouse.world_point
 
@@ -116,8 +116,8 @@ class Tank(Entity):
             horizontal = math.sqrt(dx * dx + dz * dz)
             dy = aim.y - (self.turret.world_y + 0.15)
             elevation = math.degrees(math.atan2(dy, max(horizontal, 0.001)))
-            # negative rotation_x raises the muzzle; clamp to a believable arc
-            self.barrel.rotation_x = clamp(-elevation, -60, 12)
+            # negative rotation_x raises the muzzle; allow steeper up-angle for close/high UFOs
+            self.barrel.rotation_x = clamp(-elevation, -85, 15)
 
     def take_damage(self, amount):
         if not self.alive:
