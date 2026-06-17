@@ -9,7 +9,7 @@ import math
 import random
 
 from ursina import (
-    Entity, Vec3, color, time, destroy, curve, mouse, held_keys, clamp,
+    Entity, Vec3, color, time, destroy, curve, mouse, held_keys, clamp, lerp,
 )
 
 from audio import play_sound
@@ -46,6 +46,9 @@ class Tank(Entity):
         self.max_hp = 100
         self.hp = self.max_hp
         self.alive = True
+        self.ground_height_fn = None
+        self.obstacles = []
+        self.hover_offset = 0.02
 
         # --- hull (body) ---
         self.hull = Entity(parent=self, model="cube", color=ARMY_GREEN,
@@ -93,9 +96,28 @@ class Tank(Entity):
         if abs(move_input) > 0.01:
             rad = math.radians(self.rotation_y)
             forward = Vec3(math.sin(rad), 0, math.cos(rad))
-            self.position += forward * move_input * self.speed * time.dt
-            self.x = clamp(self.x, -ARENA_BOUND, ARENA_BOUND)
-            self.z = clamp(self.z, -ARENA_BOUND, ARENA_BOUND)
+            step = forward * move_input * self.speed * time.dt
+            tentative = self.position + step
+            if not self._would_hit_obstacle(tentative):
+                self.position = tentative
+
+        # follow rolling terrain and add a mild body tilt from local slope
+        if self.ground_height_fn is not None:
+            ground_y = self.ground_height_fn(self.x, self.z)
+            self.y = lerp(self.y, ground_y + self.hover_offset, min(1, 7 * time.dt))
+
+            sample = 1.6
+            h_l = self.ground_height_fn(self.x - sample, self.z)
+            h_r = self.ground_height_fn(self.x + sample, self.z)
+            h_b = self.ground_height_fn(self.x, self.z - sample)
+            h_f = self.ground_height_fn(self.x, self.z + sample)
+            target_roll = clamp((h_l - h_r) * 14.0, -11, 11)
+            target_pitch = clamp((h_b - h_f) * 14.0, -11, 11)
+            self.rotation_z = lerp(self.rotation_z, target_roll, min(1, 8 * time.dt))
+            self.rotation_x = lerp(self.rotation_x, target_pitch, min(1, 8 * time.dt))
+        else:
+            self.rotation_z = lerp(self.rotation_z, 0, min(1, 8 * time.dt))
+            self.rotation_x = lerp(self.rotation_x, 0, min(1, 8 * time.dt))
 
         # turret sits flat on top of the hull: it only yaws (spins level) to
         # track the aim, while the barrel alone elevates -- so the turret never
@@ -136,6 +158,17 @@ class Tank(Entity):
             elevation = math.degrees(math.atan2(dy, max(horizontal, 0.001)))
             # negative rotation_x raises the muzzle; allow steeper up-angle for close/high UFOs
             self.barrel.rotation_x = clamp(-elevation, -85, 15)
+
+    def _would_hit_obstacle(self, p):
+        for o in self.obstacles:
+            if getattr(o, "disabled", False):
+                continue
+            r = getattr(o, "trunk_radius", 0.7)
+            dx = p.x - o.x
+            dz = p.z - o.z
+            if dx * dx + dz * dz < (r + 1.0) * (r + 1.0):
+                return True
+        return False
 
     def take_damage(self, amount):
         if not self.alive:
@@ -274,6 +307,7 @@ class GroundAlien(Entity):
         self.hp = 1
         self.speed = random.uniform(2.2, 3.4)
         self.aim_offset_y = 1.1
+        self.terrain_height_fn = None
         self.t = random.uniform(0, 6.28)
         self.score = 50
         self.attacked = False
@@ -306,4 +340,5 @@ class GroundAlien(Entity):
         self.position += self.forward * self.speed * time.dt
         # little hopping walk
         self.t += time.dt * 9
-        self.y = abs(math.sin(self.t)) * 0.18
+        base = self.terrain_height_fn(self.x, self.z) if callable(self.terrain_height_fn) else 0
+        self.y = base + abs(math.sin(self.t)) * 0.18

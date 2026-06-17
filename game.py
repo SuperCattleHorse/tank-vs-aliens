@@ -36,6 +36,10 @@ class Game(Entity):
         self.enemy_soft_cap = 16
         self.rock_check_toggle = False
         self.enemy_grid_cell_size = 16.0
+        self.chunk_size = 72.0
+        self.chunk_radius = 1
+        self.active_chunks = {}
+        self.trees = []
         # camera control: A/D yaw, mouse Y for pitch, settings slider adjusts sensitivity
         self.cam_yaw = 0           # current yaw offset from tank heading
         self.target_cam_yaw = 0    # target yaw for smooth lerp transition
@@ -51,6 +55,8 @@ class Game(Entity):
 
         self._build_world()
         self.tank = Tank(position=(0, 0, 0))
+        self.tank.ground_height_fn = self._terrain_height
+        self.tank.obstacles = self.trees
         self._build_hud()
         self._setup_camera()
         mouse.visible = False
@@ -59,37 +65,152 @@ class Game(Entity):
     # ------------------------------------------------------------------ setup
     def _build_world(self):
         self.sky = Sky()
-        self.sky.color = color.hsv(210, 0.30, 0.95)
+        self.sky.color = color.hsv(26, 0.65, 0.95)
 
-        # visible ground (no collider) ...
+        # hide the old flat ground; rolling chunk tiles provide the visible terrain.
         self.ground = Entity(
             model="plane", scale=GROUND_SIZE, texture="white_cube",
             texture_scale=(GROUND_SIZE / 4, GROUND_SIZE / 4),
             color=color.hsv(45, 0.25, 0.55),
+            visible=False,
         )
         # ... and a separate invisible plane at aim height for clean mouse aiming
         self.aim_plane = Entity(
             model="plane", scale=GROUND_SIZE, collider="box", visible=False, y=0.8
         )
 
-        # boundary walls (visual only)
-        b = ARENA_BOUND + 3
-        for px, pz, sx, sz in [(0, b, 2 * b, 2), (0, -b, 2 * b, 2),
-                               (b, 0, 2, 2 * b), (-b, 0, 2, 2 * b)]:
-            self.props.append(Entity(
-                model="cube", color=color.hsv(30, 0.30, 0.35),
-                scale=(sx, 3, sz), position=(px, 1.5, pz)))
+        # seed nearby chunks; rocks stream in/out around the player over time.
+        self._update_streaming_world(force=True)
 
-        # scattered rocks for depth / reference -- they also stop & detonate shells
-        for _ in range(45):
+    def _terrain_height(self, x, z):
+        # smooth rolling hills with larger wavelength for continuous slopes.
+        return (
+            0.95 * math.sin(x * 0.016)
+            + 0.70 * math.cos(z * 0.014)
+            + 0.35 * math.sin((x + z) * 0.011)
+        )
+
+    def _chunk_key(self, x, z):
+        return (int(math.floor(x / self.chunk_size)), int(math.floor(z / self.chunk_size)))
+
+    def _spawn_chunk(self, cx, cz):
+        rng = random.Random((cx * 73856093) ^ (cz * 19349663) ^ 0x1A2B3C)
+        origin_x = cx * self.chunk_size
+        origin_z = cz * self.chunk_size
+        chunk_props = []
+        chunk_rocks = []
+        chunk_trees = []
+
+        # high-density grass micro-tiles to avoid visible chunk cracks.
+        tiles_per_axis = 8
+        tile_size = self.chunk_size / tiles_per_axis
+        start_x = origin_x - self.chunk_size * 0.5 + tile_size * 0.5
+        start_z = origin_z - self.chunk_size * 0.5 + tile_size * 0.5
+        for ix in range(tiles_per_axis):
+            for iz in range(tiles_per_axis):
+                cxw = start_x + ix * tile_size
+                czw = start_z + iz * tile_size
+                h = self._terrain_height(cxw, czw)
+                shade = rng.uniform(-0.04, 0.04)
+                tile = Entity(
+                    model="cube",
+                    color=color.hsv(78, 0.48, clamp(0.56 + shade, 0.42, 0.7)),
+                    position=(cxw, h - 0.22, czw),
+                    scale=(tile_size + 0.06, 0.44, tile_size + 0.06),
+                )
+                chunk_props.append(tile)
+                self.props.append(tile)
+
+        # sparse decorative/ballistic rocks per chunk
+        for _ in range(8):
+            rx = origin_x + rng.uniform(-self.chunk_size * 0.45, self.chunk_size * 0.45)
+            rz = origin_z + rng.uniform(-self.chunk_size * 0.45, self.chunk_size * 0.45)
+            ry = self._terrain_height(rx, rz)
             rock = Entity(
-                model="cube", color=color.hsv(30, 0.15, random.uniform(0.4, 0.6)),
-                position=(random.uniform(-ARENA_BOUND, ARENA_BOUND),
-                          random.uniform(-0.1, 0.4),
-                          random.uniform(-ARENA_BOUND, ARENA_BOUND)),
-                scale=random.uniform(0.6, 1.7), rotation_y=random.uniform(0, 360))
+                model="cube",
+                color=color.hsv(30, 0.15, rng.uniform(0.4, 0.6)),
+                position=(rx, ry + rng.uniform(-0.02, 0.18), rz),
+                scale=rng.uniform(0.7, 1.8),
+                rotation_y=rng.uniform(0, 360),
+            )
+            chunk_props.append(rock)
             self.props.append(rock)
             self.rocks.append(rock)
+            chunk_rocks.append(rock)
+
+        # sparse collidable trees (do not deal damage)
+        for _ in range(rng.randint(1, 2)):
+            tx = origin_x + rng.uniform(-self.chunk_size * 0.40, self.chunk_size * 0.40)
+            tz = origin_z + rng.uniform(-self.chunk_size * 0.40, self.chunk_size * 0.40)
+            ty = self._terrain_height(tx, tz)
+            trunk_h = rng.uniform(1.8, 2.6)
+            trunk_r = rng.uniform(0.36, 0.5)
+            trunk = Entity(
+                model="cube",
+                color=color.hsv(30, 0.55, 0.30),
+                position=(tx, ty + trunk_h * 0.5, tz),
+                scale=(trunk_r, trunk_h, trunk_r),
+                collider="box",
+            )
+            trunk.trunk_radius = trunk_r * 1.35
+            leaves = Entity(
+                parent=trunk,
+                model="sphere",
+                color=color.hsv(118, 0.68, rng.uniform(0.5, 0.68)),
+                position=(0, trunk_h * 0.45, 0),
+                scale=rng.uniform(1.6, 2.2),
+            )
+            chunk_props.append(trunk)
+            chunk_props.append(leaves)
+            self.props.append(trunk)
+            self.props.append(leaves)
+            self.trees.append(trunk)
+            chunk_trees.append(trunk)
+
+        self.active_chunks[(cx, cz)] = {
+            "props": chunk_props,
+            "rocks": chunk_rocks,
+            "trees": chunk_trees,
+        }
+
+    def _update_streaming_world(self, force=False):
+        # keep the invisible aim plane centered near the player
+        center_x = self.tank.x if hasattr(self, "tank") else 0
+        center_z = self.tank.z if hasattr(self, "tank") else 0
+        self.aim_plane.x = center_x
+        self.aim_plane.z = center_z
+
+        if not hasattr(self, "tank"):
+            return
+        center = self._chunk_key(self.tank.x, self.tank.z)
+        needed = set()
+        for dx in range(-self.chunk_radius, self.chunk_radius + 1):
+            for dz in range(-self.chunk_radius, self.chunk_radius + 1):
+                needed.add((center[0] + dx, center[1] + dz))
+
+        # spawn newly needed chunks
+        for key in needed:
+            if key not in self.active_chunks:
+                self._spawn_chunk(key[0], key[1])
+
+        # remove far chunks to keep entity count bounded
+        if force:
+            return
+        stale = [key for key in self.active_chunks if key not in needed]
+        for key in stale:
+            chunk_data = self.active_chunks.pop(key)
+            for r in chunk_data["rocks"]:
+                if r in self.rocks:
+                    self.rocks.remove(r)
+            for t in chunk_data["trees"]:
+                if t in self.trees:
+                    self.trees.remove(t)
+            for p in chunk_data["props"]:
+                if p in self.rocks:
+                    self.rocks.remove(p)
+                if p in self.props:
+                    self.props.remove(p)
+                destroy(p)
 
     def _build_hud(self):
         self.hud = Entity(parent=camera.ui)
@@ -190,6 +311,7 @@ class Game(Entity):
         if self.paused or not self.running:
             return
         self.elapsed += time.dt
+        self._update_streaming_world()
         self._handle_fire()
         self._spawn()
         self._collisions()
@@ -275,12 +397,15 @@ class Game(Entity):
     def _spawn_enemy(self):
         ang = random.uniform(0, math.tau)
         dist = random.uniform(45, 70)
-        px = clamp(self.tank.x + math.cos(ang) * dist, -ARENA_BOUND, ARENA_BOUND)
-        pz = clamp(self.tank.z + math.sin(ang) * dist, -ARENA_BOUND, ARENA_BOUND)
+        px = self.tank.x + math.cos(ang) * dist
+        pz = self.tank.z + math.sin(ang) * dist
         if random.random() < 0.45:
             self.ufos.append(UFO(position=(px, random.uniform(8, 12), pz), target=self.tank))
         else:
-            self.aliens.append(GroundAlien(position=(px, 0, pz), target=self.tank))
+            gy = self._terrain_height(px, pz)
+            alien = GroundAlien(position=(px, gy, pz), target=self.tank)
+            alien.terrain_height_fn = self._terrain_height
+            self.aliens.append(alien)
 
     def _grid_cell(self, p):
         s = self.enemy_grid_cell_size
@@ -378,9 +503,6 @@ class Game(Entity):
                 Explosion(pos, scale=0.4, sound=False)
 
     def _bullet_world_hit(self, b, check_rocks=True):
-        # reached an arena wall (or flew off the field)
-        if abs(b.x) > ARENA_BOUND + 2 or abs(b.z) > ARENA_BOUND + 2:
-            return True
         # slammed into the ground
         if b.y <= 0.12:
             return True
