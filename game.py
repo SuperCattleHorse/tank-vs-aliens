@@ -32,6 +32,10 @@ class Game(Entity):
         self.fire_cd = 0.0
         self.fire_interval = 0.22
         self.spawn_timer = 1.5
+        # camera control: A/D yaw, mouse Y for pitch, settings slider adjusts sensitivity
+        self.cam_yaw = 0           # current yaw offset from tank heading
+        self.cam_pitch_offset = 0  # current pitch offset from base pitch
+        self.mouse_look_sensitivity = 0.5  # default 0-1 scale, adjustable in settings
 
         self.props = []
         self.rocks = []
@@ -111,6 +115,7 @@ class Game(Entity):
         # start already parked behind the tank's initial heading (+Z forward)
         camera.position = (0, self.cam_height, -self.cam_back)
         camera.rotation = (self.cam_pitch, 0, 0)
+        self.prev_mouse_y = mouse.y
 
     # ------------------------------------------------------------------ pause
     def input(self, key):
@@ -176,14 +181,28 @@ class Game(Entity):
         self._update_camera()
 
     def _update_camera(self):
-        # trail behind tank heading with deterministic euler rotation
-        rad = math.radians(self.tank.rotation_y)
+        # A/D (strafe keys) control yaw offset; mouse Y controls pitch offset
+        a_input = held_keys["d"] - held_keys["a"]  # +1 right, -1 left, 0 neutral
+        self.cam_yaw += a_input * 90 * time.dt     # 90 deg/sec rotation speed
+        self.cam_yaw = clamp(self.cam_yaw, -45, 45)  # clamp yaw within reasonable arc
+        
+        # mouse Y position changes pitch: lower mouse = look down, higher = look up
+        mouse_delta_y = mouse.y - self.prev_mouse_y
+        self.prev_mouse_y = mouse.y
+        self.cam_pitch_offset += mouse_delta_y * 80 * self.mouse_look_sensitivity
+        self.cam_pitch_offset = clamp(self.cam_pitch_offset, -20, 20)
+        
+        # position trails behind tank at current heading + yaw offset
+        rad = math.radians(self.tank.rotation_y + self.cam_yaw)
         forward = Vec3(math.sin(rad), 0, math.cos(rad))
         desired = (self.tank.world_position
                    + Vec3(0, self.cam_height, 0)
                    - forward * self.cam_back)
         camera.position = lerp(camera.position, desired, min(1, self.cam_lerp * time.dt))
-        camera.rotation = (self.cam_pitch, self.tank.rotation_y, 0)
+        
+        # rotation: base pitch + mouse offset, yaw = tank + A/D offset
+        camera.rotation = (self.cam_pitch + self.cam_pitch_offset, 
+                           self.tank.rotation_y + self.cam_yaw, 0)
 
     def _update_hud(self):
         self.hp_bar.scale_x = 0.42 * max(0, self.tank.hp) / self.tank.max_hp
