@@ -88,22 +88,26 @@ def _menu_button(text, parent, y, base, hi, text_color, on_click):
                   on_click=on_click)
 
 
-def _menu_ufo(parent, position=(0.68, 0.30), scale=0.19):
-    """Decorative UFO matching the in-game style, kept clear of title text."""
-    ufo = Entity(parent=parent, position=position)
-    Entity(parent=ufo, model="sphere", color=color.hsv(210, 0.10, 0.80),
-        scale=(2.6 * scale, 0.5 * scale, 2.6 * scale))
-    Entity(parent=ufo, model="sphere", color=color.hsv(210, 0.10, 0.80),
-        scale=(1.8 * scale, 0.35 * scale, 1.8 * scale), y=-0.15 * scale)
-    Entity(parent=ufo, model="sphere", color=color.hsv(195, 0.60, 0.95),
-        scale=(1.2 * scale, 1.0 * scale, 1.2 * scale), y=0.35 * scale, alpha=0.85)
-    lights = Entity(parent=ufo, y=-0.2 * scale)
-    for i in range(6):
-     a = i / 6 * 6.28318530718
-     Entity(parent=lights, model="sphere", color=color.lime, scale=0.22 * scale,
-         position=(math.cos(a) * 1.0 * scale, 0, math.sin(a) * 1.0 * scale))
-    lights.animate_rotation((0, 360, 0), duration=6, loop=True)
-    return ufo
+class RotatingUFO(Entity):
+    """Decorative UFO with smooth continuous rotation matching in-game style."""
+    def __init__(self, parent, position=(0, 0.40), scale=0.18):
+        super().__init__(parent=parent, position=position)
+        self.rotation_speed = 60  # degrees per second
+        
+        Entity(parent=self, model="sphere", color=color.hsv(210, 0.10, 0.80),
+               scale=(2.6 * scale, 0.5 * scale, 2.6 * scale))
+        Entity(parent=self, model="sphere", color=color.hsv(210, 0.10, 0.80),
+               scale=(1.8 * scale, 0.35 * scale, 1.8 * scale), y=-0.15 * scale)
+        Entity(parent=self, model="sphere", color=color.hsv(195, 0.60, 0.95),
+               scale=(1.2 * scale, 1.0 * scale, 1.2 * scale), y=0.35 * scale, alpha=0.85)
+        self.lights = Entity(parent=self, y=-0.2 * scale)
+        for i in range(6):
+            a = i / 6 * math.tau
+            Entity(parent=self.lights, model="sphere", color=color.lime, scale=0.22 * scale,
+                   position=(math.cos(a) * 1.0 * scale, 0, math.sin(a) * 1.0 * scale))
+    
+    def update(self):
+        self.lights.rotation_y += self.rotation_speed * time.dt
 
 
 # ------------------------------------------------------------------- main menu
@@ -118,8 +122,8 @@ def show_main_menu():
     # soft backdrop panel to frame the menu
     Entity(parent=menu, model="quad", color=PANEL_BG, alpha=0.5, scale=(0.98, 1.1))
 
-    # decorative UFO placed to the top-right so it does not overlap title text
-    _menu_ufo(menu)
+    # decorative UFO in the center (above title) with continuous smooth rotation
+    RotatingUFO(menu)
 
     # title with a drop shadow for legibility
     Text("TANK  vs  ALIENS", parent=menu, origin=(0, 0), position=(0.006, 0.272),
