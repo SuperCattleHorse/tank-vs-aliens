@@ -35,6 +35,7 @@ class Game(Entity):
         self.spawn_timer = 1.5
         self.enemy_soft_cap = 16
         self.rock_check_toggle = False
+        self.enemy_grid_cell_size = 16.0
         # camera control: A/D yaw, mouse Y for pitch, settings slider adjusts sensitivity
         self.cam_yaw = 0           # current yaw offset from tank heading
         self.target_cam_yaw = 0    # target yaw for smooth lerp transition
@@ -281,19 +282,46 @@ class Game(Entity):
         else:
             self.aliens.append(GroundAlien(position=(px, 0, pz), target=self.tank))
 
+    def _grid_cell(self, p):
+        s = self.enemy_grid_cell_size
+        return (int(math.floor(p.x / s)), int(math.floor(p.z / s)))
+
+    def _build_spatial_grid(self, enemies):
+        grid = {}
+        for e in enemies:
+            if getattr(e, "dead", False):
+                continue
+            key = self._grid_cell(e.world_position)
+            if key not in grid:
+                grid[key] = []
+            grid[key].append(e)
+        return grid
+
+    def _iter_nearby(self, grid, p):
+        cx, cz = self._grid_cell(p)
+        for dx in (-1, 0, 1):
+            for dz in (-1, 0, 1):
+                key = (cx + dx, cz + dz)
+                if key in grid:
+                    for e in grid[key]:
+                        yield e
+
     # ------------------------------------------------------------- collisions
     def _collisions(self):
+        ufo_grid = self._build_spatial_grid(self.ufos)
+        alien_grid = self._build_spatial_grid(self.aliens)
+
         # player bullets vs enemies
         for b in self.player_bullets:
             if getattr(b, "dead", False):
                 continue
             target = None
-            for e in self.ufos:
+            for e in self._iter_nearby(ufo_grid, b.world_position):
                 if not getattr(e, "dead", False) and distance(b, e) < 2.6:
                     target = e
                     break
             if target is None:
-                for e in self.aliens:
+                for e in self._iter_nearby(alien_grid, b.world_position):
                     if (not getattr(e, "dead", False)
                             and distance_xz(b, e) < 1.5 and abs(b.y - e.y) < 2.6):
                         target = e
