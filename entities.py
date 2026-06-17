@@ -94,8 +94,6 @@ class Tank(Entity):
             rad = math.radians(self.rotation_y)
             forward = Vec3(math.sin(rad), 0, math.cos(rad))
             self.position += forward * move_input * self.speed * time.dt
-            self.x = clamp(self.x, -ARENA_BOUND, ARENA_BOUND)
-            self.z = clamp(self.z, -ARENA_BOUND, ARENA_BOUND)
 
         # turret sits flat on top of the hull: it only yaws (spins level) to
         # track the aim, while the barrel alone elevates -- so the turret never

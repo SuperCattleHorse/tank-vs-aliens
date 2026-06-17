@@ -36,6 +36,9 @@ class Game(Entity):
         self.enemy_soft_cap = 16
         self.rock_check_toggle = False
         self.enemy_grid_cell_size = 16.0
+        self.chunk_size = 72.0
+        self.chunk_radius = 1
+        self.active_chunks = {}
         # camera control: A/D yaw, mouse Y for pitch, settings slider adjusts sensitivity
         self.cam_yaw = 0           # current yaw offset from tank heading
         self.target_cam_yaw = 0    # target yaw for smooth lerp transition
@@ -61,7 +64,7 @@ class Game(Entity):
         self.sky = Sky()
         self.sky.color = color.hsv(210, 0.30, 0.95)
 
-        # visible ground (no collider) ...
+        # a large ground patch that follows the player to create an infinite feel
         self.ground = Entity(
             model="plane", scale=GROUND_SIZE, texture="white_cube",
             texture_scale=(GROUND_SIZE / 4, GROUND_SIZE / 4),
@@ -72,24 +75,65 @@ class Game(Entity):
             model="plane", scale=GROUND_SIZE, collider="box", visible=False, y=0.8
         )
 
-        # boundary walls (visual only)
-        b = ARENA_BOUND + 3
-        for px, pz, sx, sz in [(0, b, 2 * b, 2), (0, -b, 2 * b, 2),
-                               (b, 0, 2, 2 * b), (-b, 0, 2, 2 * b)]:
-            self.props.append(Entity(
-                model="cube", color=color.hsv(30, 0.30, 0.35),
-                scale=(sx, 3, sz), position=(px, 1.5, pz)))
+        # seed nearby chunks; rocks stream in/out around the player over time.
+        self._update_streaming_world(force=True)
 
-        # scattered rocks for depth / reference -- they also stop & detonate shells
-        for _ in range(45):
+    def _chunk_key(self, x, z):
+        return (int(math.floor(x / self.chunk_size)), int(math.floor(z / self.chunk_size)))
+
+    def _spawn_chunk(self, cx, cz):
+        rng = random.Random((cx * 73856093) ^ (cz * 19349663) ^ 0x1A2B3C)
+        origin_x = cx * self.chunk_size
+        origin_z = cz * self.chunk_size
+        chunk_props = []
+        # sparse decorative/ballistic rocks per chunk
+        for _ in range(8):
             rock = Entity(
-                model="cube", color=color.hsv(30, 0.15, random.uniform(0.4, 0.6)),
-                position=(random.uniform(-ARENA_BOUND, ARENA_BOUND),
-                          random.uniform(-0.1, 0.4),
-                          random.uniform(-ARENA_BOUND, ARENA_BOUND)),
-                scale=random.uniform(0.6, 1.7), rotation_y=random.uniform(0, 360))
+                model="cube",
+                color=color.hsv(30, 0.15, rng.uniform(0.4, 0.6)),
+                position=(origin_x + rng.uniform(-self.chunk_size * 0.45, self.chunk_size * 0.45),
+                          rng.uniform(-0.1, 0.4),
+                          origin_z + rng.uniform(-self.chunk_size * 0.45, self.chunk_size * 0.45)),
+                scale=rng.uniform(0.7, 1.8),
+                rotation_y=rng.uniform(0, 360),
+            )
+            chunk_props.append(rock)
             self.props.append(rock)
             self.rocks.append(rock)
+        self.active_chunks[(cx, cz)] = chunk_props
+
+    def _update_streaming_world(self, force=False):
+        # keep the visible ground/aim plane centered near the player
+        self.ground.x = self.tank.x if hasattr(self, "tank") else 0
+        self.ground.z = self.tank.z if hasattr(self, "tank") else 0
+        self.aim_plane.x = self.ground.x
+        self.aim_plane.z = self.ground.z
+
+        if not hasattr(self, "tank"):
+            return
+        center = self._chunk_key(self.tank.x, self.tank.z)
+        needed = set()
+        for dx in range(-self.chunk_radius, self.chunk_radius + 1):
+            for dz in range(-self.chunk_radius, self.chunk_radius + 1):
+                needed.add((center[0] + dx, center[1] + dz))
+
+        # spawn newly needed chunks
+        for key in needed:
+            if key not in self.active_chunks:
+                self._spawn_chunk(key[0], key[1])
+
+        # remove far chunks to keep entity count bounded
+        if force:
+            return
+        stale = [key for key in self.active_chunks if key not in needed]
+        for key in stale:
+            chunk_props = self.active_chunks.pop(key)
+            for p in chunk_props:
+                if p in self.rocks:
+                    self.rocks.remove(p)
+                if p in self.props:
+                    self.props.remove(p)
+                destroy(p)
 
     def _build_hud(self):
         self.hud = Entity(parent=camera.ui)
@@ -190,6 +234,7 @@ class Game(Entity):
         if self.paused or not self.running:
             return
         self.elapsed += time.dt
+        self._update_streaming_world()
         self._handle_fire()
         self._spawn()
         self._collisions()
@@ -275,8 +320,8 @@ class Game(Entity):
     def _spawn_enemy(self):
         ang = random.uniform(0, math.tau)
         dist = random.uniform(45, 70)
-        px = clamp(self.tank.x + math.cos(ang) * dist, -ARENA_BOUND, ARENA_BOUND)
-        pz = clamp(self.tank.z + math.sin(ang) * dist, -ARENA_BOUND, ARENA_BOUND)
+        px = self.tank.x + math.cos(ang) * dist
+        pz = self.tank.z + math.sin(ang) * dist
         if random.random() < 0.45:
             self.ufos.append(UFO(position=(px, random.uniform(8, 12), pz), target=self.tank))
         else:
@@ -378,9 +423,6 @@ class Game(Entity):
                 Explosion(pos, scale=0.4, sound=False)
 
     def _bullet_world_hit(self, b, check_rocks=True):
-        # reached an arena wall (or flew off the field)
-        if abs(b.x) > ARENA_BOUND + 2 or abs(b.z) > ARENA_BOUND + 2:
-            return True
         # slammed into the ground
         if b.y <= 0.12:
             return True
