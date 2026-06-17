@@ -82,16 +82,18 @@ class Tank(Entity):
     def update(self):
         if not self.alive:
             return
-        # --- twin-stick movement relative to the fixed camera ---
-        move = Vec3(held_keys["d"] - held_keys["a"], 0, held_keys["w"] - held_keys["s"])
-        if move.length() > 0.1:
-            move = move.normalized()
-            self.position += move * self.speed * time.dt
+        # --- tank-style controls ---
+        # A/D rotate hull left/right; W/S move forward/back along current facing.
+        turn_input = held_keys["d"] - held_keys["a"]
+        self.rotation_y += turn_input * 110 * time.dt
+
+        move_input = held_keys["w"] - held_keys["s"]
+        if abs(move_input) > 0.01:
+            rad = math.radians(self.rotation_y)
+            forward = Vec3(math.sin(rad), 0, math.cos(rad))
+            self.position += forward * move_input * self.speed * time.dt
             self.x = clamp(self.x, -ARENA_BOUND, ARENA_BOUND)
             self.z = clamp(self.z, -ARENA_BOUND, ARENA_BOUND)
-            # body smoothly turns toward the movement direction
-            target_y = math.degrees(math.atan2(move.x, move.z))
-            self.rotation_y = _approach_angle(self.rotation_y, target_y, 360 * time.dt)
 
         # turret sits flat on top of the hull: it only yaws (spins level) to
         # track the aim, while the barrel alone elevates -- so the turret never
