@@ -122,18 +122,18 @@ def show_main_menu():
     # soft backdrop panel to frame the menu
     Entity(parent=menu, model="quad", color=PANEL_BG, alpha=0.5, scale=(0.98, 1.1))
 
-    # decorative UFO below title, scaled down to avoid window edge clipping
-    RotatingUFO(menu, position=(0, 0.32), scale=0.15)
+    # decorative UFO positioned to not block text
+    RotatingUFO(menu, position=(0, 0.24), scale=0.13)
 
     # title with a drop shadow for legibility
-    Text("TANK  vs  ALIENS", parent=menu, origin=(0, 0), position=(0.006, 0.272),
-         scale=3.4, color=TITLE_SHADOW)
-    Text("TANK  vs  ALIENS", parent=menu, origin=(0, 0), position=(0, 0.28),
-         scale=3.4, color=TITLE_GOLD)
-    Text("3 D", parent=menu, origin=(0, 0), position=(0, 0.16), scale=1.7,
+    Text("TANK  vs  ALIENS", parent=menu, origin=(0, 0), position=(0.006, 0.35),
+         scale=3.0, color=TITLE_SHADOW)
+    Text("TANK  vs  ALIENS", parent=menu, origin=(0, 0), position=(0, 0.356),
+         scale=3.0, color=TITLE_GOLD)
+    Text("3 D", parent=menu, origin=(0, 0), position=(0, 0.24), scale=1.4,
          color=ACCENT_CYAN)
     Text("Defend Earth -- blast the saucers and the alien horde.",
-         parent=menu, origin=(0, 0), position=(0, 0.07), scale=1.0,
+         parent=menu, origin=(0, 0), position=(0, 0.12), scale=0.9,
          color=SUBTLE_TEXT)
 
     _menu_button("START  GAME", menu, -0.085, BTN_GREEN, BTN_GREEN_HI,
