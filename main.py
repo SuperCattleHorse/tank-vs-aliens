@@ -6,6 +6,8 @@ Run with:  python main.py   (use your Python 3.11 environment)
 Main menu -> Start Game / Quit. In-game: WASD move, mouse aim, left-click fire,
 Esc returns to the main menu. On death a game-over panel shows your score.
 """
+import math
+
 from ursina import (
     Ursina, Entity, Text, Button, camera, color, window, mouse, application,
     destroy, Func, invoke, time,
@@ -86,6 +88,24 @@ def _menu_button(text, parent, y, base, hi, text_color, on_click):
                   on_click=on_click)
 
 
+def _menu_ufo(parent, position=(0.68, 0.30), scale=0.19):
+    """Decorative UFO matching the in-game style, kept clear of title text."""
+    ufo = Entity(parent=parent, position=position)
+    Entity(parent=ufo, model="sphere", color=color.hsv(210, 0.10, 0.80),
+        scale=(2.6 * scale, 0.5 * scale, 2.6 * scale))
+    Entity(parent=ufo, model="sphere", color=color.hsv(210, 0.10, 0.80),
+        scale=(1.8 * scale, 0.35 * scale, 1.8 * scale), y=-0.15 * scale)
+    Entity(parent=ufo, model="sphere", color=color.hsv(195, 0.60, 0.95),
+        scale=(1.2 * scale, 1.0 * scale, 1.2 * scale), y=0.35 * scale, alpha=0.85)
+    lights = Entity(parent=ufo, y=-0.2 * scale)
+    for i in range(6):
+     a = i / 6 * 6.28318530718
+     Entity(parent=lights, model="sphere", color=color.lime, scale=0.22 * scale,
+         position=(math.cos(a) * 1.0 * scale, 0, math.sin(a) * 1.0 * scale))
+    lights.animate_rotation((0, 360, 0), duration=6, loop=True)
+    return ufo
+
+
 # ------------------------------------------------------------------- main menu
 def show_main_menu():
     _keep_window()
@@ -98,10 +118,8 @@ def show_main_menu():
     # soft backdrop panel to frame the menu
     Entity(parent=menu, model="quad", color=PANEL_BG, alpha=0.5, scale=(0.98, 1.1))
 
-    # decorative spinning saucer behind the title
-    deco = Entity(parent=menu, model="sphere", color=ACCENT_CYAN,
-                  scale=(0.62, 0.14, 0.62), position=(0, 0.30, 0.02), rotation_z=10)
-    deco.animate_rotation((0, 360, 10), duration=6, loop=True)
+    # decorative UFO placed to the top-right so it does not overlap title text
+    _menu_ufo(menu)
 
     # title with a drop shadow for legibility
     Text("TANK  vs  ALIENS", parent=menu, origin=(0, 0), position=(0.006, 0.272),
