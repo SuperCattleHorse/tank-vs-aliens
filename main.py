@@ -122,8 +122,8 @@ def show_main_menu():
     # soft backdrop panel to frame the menu
     Entity(parent=menu, model="quad", color=PANEL_BG, alpha=0.5, scale=(0.98, 1.1))
 
-    # decorative UFO in the center (above title) with continuous smooth rotation
-    RotatingUFO(menu)
+    # decorative UFO below title, scaled down to avoid window edge clipping
+    RotatingUFO(menu, position=(0, 0.32), scale=0.15)
 
     # title with a drop shadow for legibility
     Text("TANK  vs  ALIENS", parent=menu, origin=(0, 0), position=(0.006, 0.272),
