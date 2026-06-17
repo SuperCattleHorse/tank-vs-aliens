@@ -35,6 +35,7 @@ class Game(Entity):
         self.spawn_timer = 1.5
         # camera control: A/D yaw, mouse Y for pitch, settings slider adjusts sensitivity
         self.cam_yaw = 0           # current yaw offset from tank heading
+        self.target_cam_yaw = 0    # target yaw for smooth lerp transition
         self.cam_pitch_offset = 0  # current pitch offset from base pitch
         self.mouse_look_sensitivity = 0.5  # default 0-1 scale, adjustable in settings
 
@@ -194,15 +195,15 @@ class Game(Entity):
         self._update_camera()
 
     def _update_camera(self):
-        # A/D (strafe keys) control yaw offset; mouse Y controls pitch offset
+        # A/D (strafe keys) control yaw offset with smooth lerp transition
         a_input = held_keys["d"] - held_keys["a"]  # +1 right, -1 left, 0 neutral
-        self.cam_yaw += a_input * 90 * time.dt     # 90 deg/sec rotation speed
-        self.cam_yaw = clamp(self.cam_yaw, -45, 45)  # clamp yaw within reasonable arc
+        self.target_cam_yaw = clamp(a_input * 45, -45, 45)  # target yaw based on input
+        self.cam_yaw = lerp(self.cam_yaw, self.target_cam_yaw, 6.0 * time.dt)  # smooth 6x/sec convergence
         
-        # mouse Y position changes pitch: lower mouse = look down, higher = look up
+        # mouse Y position changes pitch: lower mouse = look down, higher = look up (inverted from common FPS)
         mouse_delta_y = mouse.y - self.prev_mouse_y
         self.prev_mouse_y = mouse.y
-        self.cam_pitch_offset += mouse_delta_y * 80 * self.mouse_look_sensitivity
+        self.cam_pitch_offset -= mouse_delta_y * 80 * self.mouse_look_sensitivity  # inverted for intuitive aim
         self.cam_pitch_offset = clamp(self.cam_pitch_offset, -20, 20)
         
         # position trails behind tank at current heading + yaw offset
