@@ -244,8 +244,12 @@ class Game(Entity):
     def fire(self):
         self.fire_cd = self.fire_interval
         pos = self.tank.muzzle_position
-        # bullet follows barrel direction exactly (barrel already points at aim target)
-        direction = self.tank.aim_direction
+        # shoot at the exact same aim point used by the turret this frame
+        target = getattr(self.tank, "current_aim_point", None)
+        if target is not None:
+            direction = (Vec3(target) - pos).normalized()
+        else:
+            direction = self.tank.aim_direction
         self.player_bullets.append(
             Bullet(pos, direction, speed=62, owner="player", col=color.yellow, scale=0.35))
         flash = Entity(model="sphere", color=color.orange, position=pos, scale=0.7)

@@ -66,12 +66,14 @@ class Tank(Entity):
         self.barrel = Entity(parent=self.turret, model="cube", color=TRACK_GRAY,
                              scale=(0.22, 0.22, 2.2), position=(0, 0.15, 1.2))
         self.turret_height = 1.15
+        self.current_aim_point = self.world_position + Vec3(0, 0.8, 25)
 
     @property
     def muzzle_position(self):
         # muzzle position at barrel end, accounting for barrel elevation
         # this ensures bullet origin matches barrel direction
-        barrel_tip = self.barrel.world_position + Vec3(self.barrel.forward).normalized() * 2.2
+        # barrel length is 2.2, so tip is half-length from the barrel center
+        barrel_tip = self.barrel.world_position + Vec3(self.barrel.forward).normalized() * 1.1
         return barrel_tip
 
     @property
@@ -100,16 +102,19 @@ class Tank(Entity):
         # looks tilted yet the cannon can still point up at flying saucers
         self.turret.position = self.world_position + Vec3(0, self.turret_height, 0)
 
-        # prioritize the exact mouse hit point when hovering an enemy collider;
-        # this keeps crosshair lock-on and projectile direction tightly aligned.
+        # lock on enemy root center instead of pick-volume surface point,
+        # so crosshair lock and hit registration stay consistent.
         aim = None
         hovered = mouse.hovered_entity
         if hovered is not None and getattr(hovered, "is_enemy", False):
-            aim = mouse.world_point if mouse.world_point is not None else hovered.world_position + Vec3(0, 0.35, 0)
+            enemy_root = hovered.parent if hovered.parent is not None else hovered
+            y_offset = getattr(enemy_root, "aim_offset_y", 0.35)
+            aim = enemy_root.world_position + Vec3(0, y_offset, 0)
         else:
             aim = mouse.world_point
 
         if aim is not None:
+            self.current_aim_point = Vec3(aim)
             dx = aim.x - self.turret.world_x
             dz = aim.z - self.turret.world_z
             self.turret.rotation = (0, math.degrees(math.atan2(dx, dz)), 0)
@@ -202,6 +207,7 @@ class UFO(Entity):
         self.hp = 2
         self.speed = 4.5
         self.hover_radius = 16
+        self.aim_offset_y = 0.35
         self.base_y = position[1]
         self.t = random.uniform(0, 6.28)
         self.fire_timer = random.uniform(1.5, 3.5)
@@ -246,6 +252,7 @@ class GroundAlien(Entity):
         self.target = target
         self.hp = 1
         self.speed = random.uniform(2.2, 3.4)
+        self.aim_offset_y = 1.1
         self.t = random.uniform(0, 6.28)
         self.score = 50
         self.attacked = False
