@@ -111,8 +111,8 @@ class Tank(Entity):
             h_r = self.ground_height_fn(self.x + sample, self.z)
             h_b = self.ground_height_fn(self.x, self.z - sample)
             h_f = self.ground_height_fn(self.x, self.z + sample)
-            target_roll = clamp((h_l - h_r) * 14.0, -11, 11)
-            target_pitch = clamp((h_b - h_f) * 14.0, -11, 11)
+            target_roll = clamp((h_l - h_r) * 22.0, -11, 11)
+            target_pitch = clamp((h_b - h_f) * 22.0, -11, 11)
             self.rotation_z = lerp(self.rotation_z, target_roll, min(1, 8 * time.dt))
             self.rotation_x = lerp(self.rotation_x, target_pitch, min(1, 8 * time.dt))
         else:

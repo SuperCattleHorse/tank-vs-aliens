@@ -83,11 +83,14 @@ class Game(Entity):
         self._update_streaming_world(force=True)
 
     def _terrain_height(self, x, z):
-        # smooth rolling hills with larger wavelength for continuous slopes.
+        # rolling hills: amplified and slightly more frequent so the terrain is
+        # visibly uneven from the third-person camera and the tank pitches/rolls.
         return (
-            0.95 * math.sin(x * 0.016)
-            + 0.70 * math.cos(z * 0.014)
-            + 0.35 * math.sin((x + z) * 0.011)
+            4.0 * (
+                0.95 * math.sin(x * 0.024)
+                + 0.70 * math.cos(z * 0.021)
+                + 0.35 * math.sin((x + z) * 0.0165)
+            )
         )
 
     def _chunk_key(self, x, z):
@@ -174,11 +177,14 @@ class Game(Entity):
         }
 
     def _update_streaming_world(self, force=False):
-        # keep the invisible aim plane centered near the player
+        # keep the invisible aim plane centered near the player and at local
+        # ground height so mouse aiming stays relative to the rolling terrain.
         center_x = self.tank.x if hasattr(self, "tank") else 0
         center_z = self.tank.z if hasattr(self, "tank") else 0
         self.aim_plane.x = center_x
         self.aim_plane.z = center_z
+        if hasattr(self, "tank"):
+            self.aim_plane.y = self._terrain_height(center_x, center_z) + 0.8
 
         if not hasattr(self, "tank"):
             return
