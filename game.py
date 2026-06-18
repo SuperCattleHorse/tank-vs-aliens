@@ -503,8 +503,8 @@ class Game(Entity):
                 Explosion(pos, scale=0.4, sound=False)
 
     def _bullet_world_hit(self, b, check_rocks=True):
-        # slammed into the rolling ground (not the fixed y=0 plane)
-        if b.y <= self._terrain_height(b.x, b.z) + 0.12:
+        # slammed into the ground
+        if b.y <= 0.12:
             return True
         if not check_rocks:
             return False
